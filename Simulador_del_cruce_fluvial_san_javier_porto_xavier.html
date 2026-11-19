@@ -1,0 +1,1790 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mapa y Simulador del Cruce Fluvial San Javier – Porto Xavier</title>
+
+  <!-- Tailwind CSS para diseño moderno y responsivo -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Leaflet.js CSS y JS vía CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Tipografías Inter y JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            fluvial: {
+              950: '#081221',
+              900: '#0f172a',
+              800: '#1e293b',
+              700: '#334155',
+              600: '#0284c7',
+              500: '#0ea5e9',
+              400: '#38bdf8',
+            },
+            frontera: {
+              600: '#059669',
+              500: '#10b981',
+              400: '#34d399',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Estilos personalizados de cartografía, controles y animaciones náuticas */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: #081221;
+      color: #f8fafc;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      min-height: 380px;
+      z-index: 1;
+      background: #0f172a;
+    }
+
+    /* Personalización limpia de popups de Leaflet */
+    .leaflet-popup-content-wrapper {
+      background: #0f172a !important;
+      color: #f8fafc !important;
+      border: 1px solid #334155 !important;
+      border-radius: 14px !important;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55) !important;
+    }
+    .leaflet-popup-tip {
+      background: #0f172a !important;
+      border: 1px solid #334155 !important;
+    }
+    .leaflet-popup-close-button {
+      color: #94a3b8 !important;
+      padding: 6px 8px !important;
+    }
+    .leaflet-popup-close-button:hover {
+      color: #ffffff !important;
+    }
+
+    /* Etiquetas permanentes de puertos */
+    .port-tooltip {
+      background: rgba(15, 23, 42, 0.92) !important;
+      color: #f8fafc !important;
+      border: 1px solid rgba(56, 189, 248, 0.5) !important;
+      border-radius: 8px !important;
+      padding: 4px 9px !important;
+      font-family: 'Inter', sans-serif !important;
+      font-weight: 700 !important;
+      font-size: 11.5px !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+      white-space: nowrap;
+    }
+    .port-tooltip::before {
+      display: none !important;
+    }
+
+    /* Pulso de la pelotita fluvial animada */
+    @keyframes ferryPulse {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.75);
+      }
+      70% {
+        transform: scale(1.06);
+        box-shadow: 0 0 0 12px rgba(56, 189, 248, 0);
+      }
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+      }
+    }
+
+    .ferry-ball-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      border: 2.5px solid #ffffff;
+      animation: ferryPulse 1.8s infinite;
+      transition: background-color 0.25s ease;
+    }
+
+    /* Scrollbar discreta para panel lateral */
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Slider estilizado */
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen lg:h-screen lg:overflow-hidden font-sans antialiased">
+
+  <!-- BARRA SUPERIOR DE ENCABEZADO -->
+  <header class="bg-slate-900/95 border-b border-slate-800 px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0 z-20">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-sky-500/20 shrink-0">
+        <!-- Ícono náutico SVG -->
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 17l2.5 2.5a3 3 0 004.24 0L12 17.24l2.26 2.26a3 3 0 004.24 0L21 17M4 13l2-6h12l2 6M9 7V4h6v3M2 21c2 0 3-1 5-1s3 1 5 1 3-1 5-1 3 1 5 1" />
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white truncate">
+            Mapa y Simulador del Cruce Fluvial San Javier – Porto Xavier
+          </h1>
+          <span class="px-2 py-0.5 text-[11px] font-mono font-bold rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+            Paso Internacional
+          </span>
+          <span class="px-2 py-0.5 text-[11px] font-mono font-bold rounded-full bg-slate-800 text-slate-200 border border-slate-700">
+            @mbattaglia07
+          </span>
+        </div>
+        <p class="text-[11px] sm:text-xs text-slate-400 truncate">
+          Paso Internacional Paso de la Barca · Río Uruguay (🇦🇷 Misiones – 🇧🇷 Río Grande do Sul) · Vigencia: 28 Abril 2026
+        </p>
+      </div>
+    </div>
+
+    <!-- Métricas rápidas y acceso directo al proyecto del puente -->
+    <div class="flex items-center gap-2 sm:gap-3">
+      <div class="hidden md:flex items-center gap-3 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
+        <div>
+          <span class="text-slate-400">Traza fluvial:</span>
+          <strong id="header-dist" class="font-mono text-sky-300 ml-1">596,46 m</strong>
+        </div>
+        <span class="text-slate-700">|</span>
+        <div>
+          <span class="text-slate-400">Próx. salida:</span>
+          <strong id="header-next-boat" class="font-mono text-emerald-300 ml-1">08:15 hs (en 0 min)</strong>
+        </div>
+      </div>
+
+      <button id="btn-open-context-tab" type="button"
+        class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 15h18M5 15v4m14-4v4M7 15c1.5-4 3.5-6 5-6s3.5 2 5 6" />
+        </svg>
+        <span>Futuro Puente</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTENEDOR PRINCIPAL SPLIT (MAPA + PANEL LATERAL) -->
+  <main class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
+
+    <!-- SECCIÓN IZQUIERDA: MAPA INTERACTIVO + CONTROLES DE SIMULACIÓN -->
+    <section class="flex-1 flex flex-col min-h-[520px] lg:min-h-0 relative border-b lg:border-b-0 lg:border-r border-slate-800">
+
+      <!-- Contenedor del Mapa Leaflet -->
+      <div class="relative flex-1 min-h-[360px]">
+        <div id="map"></div>
+
+        <!-- Selector visual flotante en la esquina superior derecha del mapa -->
+        <div class="absolute top-3 right-14 z-[500] flex flex-wrap gap-1 bg-slate-900/92 backdrop-blur-md p-1.5 rounded-xl border border-slate-700/80 shadow-xl">
+          <button type="button" data-basemap="satellite"
+            class="basemap-btn px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer bg-sky-600 text-white shadow">
+            Satelital
+          </button>
+          <button type="button" data-basemap="hybrid"
+            class="basemap-btn px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer text-slate-300 hover:bg-slate-800">
+            Google Hybrid
+          </button>
+          <button type="button" data-basemap="argenmap"
+            class="basemap-btn px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer text-slate-300 hover:bg-slate-800">
+            Argenmap (IGN)
+          </button>
+        </div>
+
+        <!-- Tarjeta flotante de telemetría de navegación en tiempo real -->
+        <div class="absolute bottom-3 left-3 right-3 sm:right-auto sm:w-80 z-[500] bg-slate-900/92 backdrop-blur-md border border-slate-700/90 rounded-2xl p-3 shadow-2xl">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <span class="text-[11px] uppercase tracking-wider font-bold text-slate-400">Estado de la Balsa</span>
+            <span id="sim-status-pill" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              En navegación
+            </span>
+          </div>
+
+          <div id="sim-leg-label" class="text-xs font-bold text-white mb-2">
+            🇦🇷 Puerto San Javier → 🇧🇷 Porto Xavier
+          </div>
+
+          <!-- Barra de progreso del cruce -->
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+            <div id="sim-progress-bar" class="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-150" style="width: 0%;"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5 text-center bg-slate-950/75 rounded-xl p-2 border border-slate-800/80">
+            <div>
+              <div class="text-[10px] text-slate-400">Avance</div>
+              <div id="sim-pct-text" class="font-mono text-xs font-bold text-sky-300">0%</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-slate-400">Recorrido</div>
+              <div id="sim-meters-text" class="font-mono text-xs font-bold text-white">0 / 596 m</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-slate-400">Próx. barco</div>
+              <div id="sim-next-wait" class="font-mono text-xs font-bold text-emerald-300">45 min</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Firma / marca de autoría visible en el mapa -->
+        <div class="hidden sm:flex items-center gap-1.5 absolute bottom-6 right-3 z-[500] bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-full px-3 py-1 text-[11px] font-mono font-bold text-slate-200 shadow-lg pointer-events-none">
+          <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+          <span>@mbattaglia07</span>
+        </div>
+      </div>
+
+      <!-- PANEL INFERIOR DE CONTROL DEL SIMULADOR -->
+      <div class="bg-slate-900 border-t border-slate-800 p-3 sm:px-4 sm:py-3 shrink-0">
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-3 items-center">
+
+          <!-- Reloj, Play/Pausa y Velocidad de Simulación (con salto de 100x directo a 300x y 500x) -->
+          <div class="xl:col-span-7 flex flex-wrap items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5">
+            <div class="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-center min-w-[92px]">
+              <div class="text-[10px] text-slate-400 uppercase font-semibold">Hora Local</div>
+              <div id="sim-clock" class="font-mono text-lg font-extrabold text-sky-400 leading-tight">08:15:00</div>
+            </div>
+
+            <button id="btn-play-pause" type="button"
+              class="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-sky-600/20 transition cursor-pointer">
+              <span id="play-pause-icon">⏸</span>
+              <span id="play-pause-text">Pausar</span>
+            </button>
+
+            <!-- Selector de velocidad de simulación: 1x, 10x, 30x, 100x, 300x y 500x -->
+            <div class="flex flex-wrap items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+              <button type="button" data-speed="1" class="speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-slate-400 hover:text-white cursor-pointer">1x</button>
+              <button type="button" data-speed="10" class="speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold bg-emerald-600 text-white cursor-pointer">10x</button>
+              <button type="button" data-speed="30" class="speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-slate-400 hover:text-white cursor-pointer">30x</button>
+              <button type="button" data-speed="100" class="speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-slate-400 hover:text-white cursor-pointer">100x</button>
+              <button type="button" data-speed="300" class="speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-slate-400 hover:text-white cursor-pointer">300x</button>
+              <button type="button" data-speed="500" class="speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-slate-400 hover:text-white cursor-pointer">500x</button>
+            </div>
+
+            <!-- Slider de 07:30 a 18:30 con marcas visuales de salidas -->
+            <div class="w-full mt-1">
+              <div class="flex justify-between text-[10px] font-mono text-slate-400 mb-0.5">
+                <span>07:30</span>
+                <span>Línea de tiempo diaria (marcas = salidas)</span>
+                <span>18:30</span>
+              </div>
+              <div class="relative w-full h-1.5 mb-0.5">
+                <div id="slider-ticks" class="relative w-full h-full"></div>
+              </div>
+              <input id="time-slider" type="range" min="450" max="1110" step="0.25" value="495" class="w-full cursor-pointer" />
+            </div>
+          </div>
+
+          <!-- Selector de Régimen Diario, Saltos Rápidos y Espera al Próximo Barco -->
+          <div class="xl:col-span-5 bg-slate-950/80 border border-slate-800 rounded-2xl p-2.5 flex flex-col justify-between gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] font-bold text-slate-300">Régimen y Saltos Rápidos:</span>
+              <div class="flex rounded-lg bg-slate-900 p-0.5 border border-slate-800">
+                <button type="button" id="regime-weekday"
+                  class="regime-btn px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-600 text-white cursor-pointer">
+                  Lun – Vie
+                </button>
+                <button type="button" id="regime-weekend"
+                  class="regime-btn px-2 py-0.5 rounded-md text-[11px] font-bold text-slate-400 hover:text-white cursor-pointer">
+                  Sáb / Dom / Fer
+                </button>
+              </div>
+            </div>
+            <div id="quick-jump-container" class="flex flex-wrap gap-1">
+              <!-- Botones generados dinámicamente según el régimen -->
+            </div>
+            <div class="flex items-center justify-between text-[11px] bg-slate-900/90 rounded-xl px-2.5 py-1.5 border border-slate-800">
+              <span class="text-slate-400">Espera próximo barco:</span>
+              <strong id="bar-wait-summary" class="font-mono font-bold text-amber-300">45 min (09:00 hs)</strong>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL LATERAL DERECHO: 3 PESTAÑAS LIMPIAS -->
+    <aside class="w-full lg:w-[440px] xl:w-[470px] bg-slate-900 flex flex-col shrink-0 lg:h-full lg:overflow-hidden">
+
+      <!-- Navegación por pestañas -->
+      <div class="grid grid-cols-3 bg-slate-950 border-b border-slate-800 p-1.5 gap-1 shrink-0">
+        <button type="button" data-tab="horarios"
+          class="tab-btn py-2 px-2 rounded-xl text-xs font-bold transition cursor-pointer bg-sky-600 text-white shadow">
+          🕒 Horarios
+        </button>
+        <button type="button" data-tab="tarifas"
+          class="tab-btn py-2 px-2 rounded-xl text-xs font-bold transition cursor-pointer text-slate-400 hover:text-white hover:bg-slate-900">
+          💱 Tarifas 2026
+        </button>
+        <button type="button" data-tab="contexto"
+          class="tab-btn py-2 px-2 rounded-xl text-xs font-bold transition cursor-pointer text-slate-400 hover:text-white hover:bg-slate-900">
+          🌉 Contexto y Puente
+        </button>
+      </div>
+
+      <!-- CONTENIDO SCROLLEABLE DE LAS PESTAÑAS -->
+      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-4">
+
+        <!-- PESTAÑA 1: HORARIOS OFICIALES -->
+        <div id="tab-horarios" class="tab-panel space-y-4">
+          <!-- Cronograma Visual del Día y Medidor de Espera -->
+          <div class="bg-gradient-to-br from-slate-950 via-slate-950 to-sky-950/40 border border-sky-500/35 rounded-2xl p-3.5 space-y-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-sky-300">Panorama del Día y Espera</span>
+                <h2 class="text-xs sm:text-sm font-extrabold text-white">¿Cuándo sale el próximo barco?</h2>
+              </div>
+              <span id="badge-active-regime" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-slate-200 border border-slate-700">
+                Lunes a Viernes
+              </span>
+            </div>
+
+            <!-- Tarjeta Protagonista: Próxima Salida + Tiempo de Espera -->
+            <div class="grid grid-cols-2 gap-2">
+              <div class="bg-slate-900/95 border border-slate-800 rounded-xl p-2.5">
+                <div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Próximo zarpe</div>
+                <div id="next-departure-big" class="font-mono text-lg font-extrabold text-sky-300 leading-tight mt-0.5">
+                  09:00 hs
+                </div>
+                <div id="next-service-summary" class="text-[11px] text-slate-300 truncate mt-0.5">
+                  Balsa navegando ahora
+                </div>
+              </div>
+
+              <div class="bg-slate-900/95 border border-amber-500/30 rounded-xl p-2.5 flex flex-col justify-between">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Tiempo de espera</span>
+                  <span id="wait-countdown-badge" class="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-amber-500/15 text-amber-300">
+                    45 min
+                  </span>
+                </div>
+                <div id="wait-big-value" class="font-mono text-lg font-extrabold text-amber-300 leading-tight mt-0.5">
+                  45 min
+                </div>
+                <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
+                  <div id="wait-progress-fill" class="h-full bg-amber-400 transition-all duration-150" style="width: 0%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Línea de Tiempo Horizontal por Bloques (Mañana / Receso Mediodía / Tarde) -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-2.5">
+              <svg id="day-schedule-svg" viewBox="0 0 420 124" class="w-full h-auto block select-none cursor-pointer" role="img" aria-label="Línea de tiempo diaria de salidas y receso del mediodía">
+                <!-- Renderizado dinámicamente por renderDayScheduleChart() -->
+              </svg>
+              <div class="flex flex-wrap items-center justify-between gap-2 pt-2 mt-1 border-t border-slate-800/80 text-[10.5px] text-slate-400">
+                <div class="flex items-center gap-3 flex-wrap">
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span> Salida
+                  </span>
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="px-1 rounded bg-slate-800 font-mono text-[9.5px] text-slate-300">45m</span> Intervalo
+                  </span>
+                  <span class="inline-flex items-center gap-1.5">
+                    <span class="w-2.5 h-2.5 rounded-xs bg-amber-500/25 border border-amber-500/50 inline-block"></span> Sin servicio
+                  </span>
+                </div>
+                <span class="text-slate-500">Tocá cualquier hora</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloque Lunes a Viernes -->
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <h2 class="text-sm font-extrabold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                Lunes a Viernes
+              </h2>
+              <span class="text-[11px] font-mono text-slate-400">10 salidas/día</span>
+            </div>
+
+            <div class="space-y-2.5">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-300/90 mb-1.5">☀️ Turno Mañana</div>
+                <div id="grid-weekday-morning" class="grid grid-cols-5 gap-1.5"></div>
+              </div>
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-orange-300/90 mb-1.5">🌤️ Turno Tarde</div>
+                <div id="grid-weekday-afternoon" class="grid grid-cols-5 gap-1.5"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bloque Sábados, Domingos y Feriados -->
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
+            <div class="flex items-center justify-between mb-2.5">
+              <h2 class="text-sm font-extrabold text-white flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                Sábados, Domingos y Feriados
+              </h2>
+              <span class="text-[11px] font-mono text-slate-400">6 salidas/día</span>
+            </div>
+
+            <div class="space-y-2.5">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-amber-300/90 mb-1.5">☀️ Turno Mañana</div>
+                <div id="grid-weekend-morning" class="grid grid-cols-3 gap-2"></div>
+              </div>
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-wider text-orange-300/90 mb-1.5">🌤️ Turno Tarde</div>
+                <div id="grid-weekend-afternoon" class="grid grid-cols-3 gap-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recuadro informativo breve sobre el cruce y el futuro puente internacional -->
+          <div class="bg-gradient-to-br from-slate-950 to-slate-900 border border-emerald-500/30 rounded-2xl p-3.5 space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <h3 class="text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                Integración con Brasil y Futuro Puente Internacional
+              </h3>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Este paso fluvial conecta diariamente <strong>San Javier (Misiones, AR)</strong> con <strong>Porto Xavier (Río Grande do Sul, BR)</strong> para el comercio bilateral, el tránsito vecinal y el turismo hacia el sur brasileño. A futuro, el sistema de balsas será complementado por el proyectado <strong>Puente Internacional San Javier – Porto Xavier</strong>.
+            </p>
+            <div class="pt-0.5 flex flex-wrap items-center justify-between gap-2">
+              <a href="https://bamboogroup.com.ar/puente-san-javier-porto-xavier/" target="_blank" rel="noopener noreferrer"
+                class="inline-flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-sky-300 underline underline-offset-4 transition">
+                <span>Ver informe del futuro puente internacional</span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 2: TARIFAS Y CALCULADORA (ABRIL 2026) -->
+        <div id="tab-tarifas" class="tab-panel hidden space-y-4">
+          <div class="bg-slate-950/90 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-extrabold text-white">Calculadora de Cruce (Abril 2026)</h2>
+              <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
+                Vigencia Abr 2026
+              </span>
+            </div>
+
+            <!-- Selector de Sentido (Ida en ARS vs Regreso en BRL) -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5">Sentido del viaje y moneda de pago:</label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <button type="button" id="dir-ida"
+                  class="dir-btn p-2.5 rounded-xl border text-left transition cursor-pointer bg-sky-600/20 border-sky-500 text-white">
+                  <div class="text-xs font-extrabold">🇦🇷 Ida: San Javier → Porto Xavier</div>
+                  <div class="text-[11px] text-sky-300 font-mono">Tarifa en Pesos (ARS $)</div>
+                </button>
+                <button type="button" id="dir-regreso"
+                  class="dir-btn p-2.5 rounded-xl border text-left transition cursor-pointer bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">
+                  <div class="text-xs font-extrabold">🇧🇷 Regreso: Porto Xavier → San Javier</div>
+                  <div class="text-[11px] text-emerald-300 font-mono">Tarifa en Reales (BRL R$)</div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Selector de Categoría / Vehículo -->
+            <div>
+              <label for="calc-category" class="block text-xs font-semibold text-slate-300 mb-1">Categoría / Vehículo:</label>
+              <select id="calc-category"
+                class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold text-white focus:outline-none focus:border-sky-500">
+              </select>
+            </div>
+
+            <!-- Contador de Acompañantes / Pasajeros -->
+            <div id="companions-box" class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2">
+              <div>
+                <div id="companions-label" class="text-xs font-bold text-white">Acompañantes / Pasajeros adicionales</div>
+                <div id="companions-sub" class="text-[11px] text-slate-400">$5.000 ARS por cada acompañante</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="btn-comp-minus"
+                  class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center border border-slate-700 cursor-pointer">
+                  −
+                </button>
+                <span id="companions-count" class="font-mono text-sm font-extrabold text-white w-6 text-center">0</span>
+                <button type="button" id="btn-comp-plus"
+                  class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center border border-slate-700 cursor-pointer">
+                  +
+                </button>
+              </div>
+            </div>
+
+            <!-- Resultado Desglosado en Tiempo Real -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-sky-500/40 rounded-2xl p-3.5">
+              <div class="flex justify-between text-xs text-slate-400 mb-1">
+                <span>Tarifa base vehículo / pasaje:</span>
+                <span id="calc-base-val" class="font-mono text-slate-200">$ 20.000</span>
+              </div>
+              <div class="flex justify-between text-xs text-slate-400 mb-2 pb-2 border-b border-slate-800">
+                <span id="calc-extra-label">Acompañantes (0 × $ 5.000):</span>
+                <span id="calc-extra-val" class="font-mono text-slate-200">$ 0</span>
+              </div>
+              <div class="flex items-baseline justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Total a abonar:</span>
+                <span id="calc-total-val" class="font-mono text-xl font-extrabold text-sky-400">$ 20.000 ARS</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla Comparativa Completa de Ambas Orillas -->
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+              Cuadro Tarifario Completo (Abril 2026)
+            </h3>
+
+            <!-- Tabla Ida ARS -->
+            <div>
+              <div class="text-xs font-bold text-sky-300 mb-1.5">🇦🇷 San Javier → Porto Xavier (Pesos Argentinos)</div>
+              <div class="overflow-hidden rounded-xl border border-slate-800">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-900 text-slate-400 text-[11px]">
+                    <tr>
+                      <th class="py-2 px-2.5">Categoría</th>
+                      <th class="py-2 px-2.5 text-right">Tarifa Base</th>
+                      <th class="py-2 px-2.5 text-right">Adicional</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/80 text-slate-200">
+                    <tr><td class="py-1.5 px-2.5">Auto o camioneta</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 20.000</td><td class="py-1.5 px-2.5 text-right font-mono text-slate-400">+$ 5.000/acomp.</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Moto</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 18.000</td><td class="py-1.5 px-2.5 text-right font-mono text-slate-400">+$ 5.000/acomp.</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Colectivo grande</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 65.000</td><td class="py-1.5 px-2.5 text-right font-mono text-slate-400">+$ 5.000/pasaj.</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Combi y Mini Bus</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 53.000</td><td class="py-1.5 px-2.5 text-right font-mono text-slate-400">+$ 5.000/pasaj.</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Bicicleta</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 7.000</td><td class="py-1.5 px-2.5 text-right text-slate-500">—</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Camión grande</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 75.000</td><td class="py-1.5 px-2.5 text-right text-slate-500">—</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Camión chico</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 59.000</td><td class="py-1.5 px-2.5 text-right text-slate-500">—</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Peatón</td><td class="py-1.5 px-2.5 text-right font-mono font-bold">$ 6.000</td><td class="py-1.5 px-2.5 text-right text-slate-500">—</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Tabla Regreso BRL -->
+            <div>
+              <div class="text-xs font-bold text-emerald-300 mb-1.5">🇧🇷 Porto Xavier → San Javier (Reales Brasileños)</div>
+              <div class="overflow-hidden rounded-xl border border-slate-800">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-slate-900 text-slate-400 text-[11px]">
+                    <tr>
+                      <th class="py-2 px-2.5">Categoría</th>
+                      <th class="py-2 px-2.5 text-right">Tarifa</th>
+                      <th class="py-2 px-2.5 text-right">Condición</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/80 text-slate-200">
+                    <tr><td class="py-1.5 px-2.5">Auto o camioneta</td><td class="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-300">R$ 50</td><td class="py-1.5 px-2.5 text-right text-slate-400">Hasta 5 pasajeros</td></tr>
+                    <tr><td class="py-1.5 px-2.5">Peatón</td><td class="py-1.5 px-2.5 text-right font-mono font-bold text-emerald-300">R$ 10</td><td class="py-1.5 px-2.5 text-right text-slate-400">Por persona</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 3: CONTEXTO TERRITORIAL Y FUTURO PUENTE INTERNACIONAL -->
+        <div id="tab-contexto" class="tab-panel hidden space-y-4">
+          <!-- Contexto Comercial, Vecinal y Turístico -->
+          <div class="bg-slate-950/85 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-sm font-extrabold text-white">Corredor Estratégico Argentina – Brasil</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                Río Uruguay
+              </span>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              El paso fronterizo fluvial <strong>San Javier (Misiones, Argentina) – Porto Xavier (Río Grande do Sul, Brasil)</strong> cumple un rol esencial en el intercambio comercial regional, la integración cotidiana de las comunidades fronterizas y el flujo laboral y turístico entre el noreste argentino y los polos productivos y balnearios de <strong>Río Grande do Sul</strong> y <strong>Santa Catarina</strong>.
+            </p>
+            <div class="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div class="bg-slate-900 rounded-xl p-2 border border-slate-800">
+                <div class="text-[10px] text-slate-400">Tramo 1 (AR → Canal)</div>
+                <div class="font-mono text-xs font-bold text-sky-300">381,38 m</div>
+              </div>
+              <div class="bg-slate-900 rounded-xl p-2 border border-slate-800">
+                <div class="text-[10px] text-slate-400">Tramo 2 (Canal → BR)</div>
+                <div class="font-mono text-xs font-bold text-emerald-300">215,08 m</div>
+              </div>
+              <div class="bg-slate-900 rounded-xl p-2 border border-slate-800">
+                <div class="text-[10px] text-slate-400">Traza Fluvial Total</div>
+                <div class="font-mono text-xs font-bold text-white">596,46 m</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sección dedicada al Futuro Puente Internacional San Javier – Porto Xavier -->
+          <div class="bg-gradient-to-br from-slate-950 via-slate-950 to-emerald-950/30 border border-emerald-500/35 rounded-2xl p-3.5 space-y-3">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Corredor Bioceánico</span>
+                <h3 class="text-sm font-extrabold text-white mt-0.5">
+                  Futuro Puente Internacional San Javier – Porto Xavier
+                </h3>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                Horizonte 2030
+              </span>
+            </div>
+
+            <p class="text-xs text-slate-300 leading-relaxed">
+              La obra proyectada sobre el Río Uruguay permitirá reemplazar la restricción horaria y de calado del servicio de balsas por una conexión vial permanente las 24 horas, fortaleciendo la logística de cargas y la integración bioceánica entre Argentina y Brasil.
+            </p>
+
+            <!-- Ficha Técnica del Proyecto -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-2">
+              <div class="text-[11px] font-extrabold uppercase tracking-wider text-sky-300">
+                Ficha Técnica del Proyecto Vial
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
+                  <div class="text-[10px] text-slate-400">Longitud total</div>
+                  <div class="font-mono font-bold text-white">950 m</div>
+                </div>
+                <div class="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
+                  <div class="text-[10px] text-slate-400">Ancho de tablero</div>
+                  <div class="font-mono font-bold text-white">17,40 m</div>
+                </div>
+                <div class="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
+                  <div class="text-[10px] text-slate-400">Altura sobre el agua</div>
+                  <div class="font-mono font-bold text-sky-300">18 m</div>
+                </div>
+                <div class="bg-slate-950/80 p-2 rounded-lg border border-slate-800/80">
+                  <div class="text-[10px] text-slate-400">Plazo de ejecución</div>
+                  <div class="font-mono font-bold text-emerald-300">1.440 días (~2030)</div>
+                </div>
+              </div>
+
+              <ul class="text-[11.5px] text-slate-300 space-y-1 pt-1 border-t border-slate-800">
+                <li class="flex items-center justify-between">
+                  <span class="text-slate-400">Configuración vial:</span>
+                  <strong class="text-white">Doble calzada vehicular</strong>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span class="text-slate-400">Banquinas laterales:</span>
+                  <strong class="font-mono text-slate-200">2,5 m</strong>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span class="text-slate-400">Ciclovía integrada:</span>
+                  <strong class="font-mono text-slate-200">1,60 m</strong>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span class="text-slate-400">Senda peatonal:</span>
+                  <strong class="font-mono text-slate-200">1,20 m</strong>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span class="text-slate-400">Sistemas activos:</span>
+                  <strong class="text-emerald-300">Iluminación LED y monitoreo en tiempo real</strong>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Enlace externo destacado -->
+            <a href="https://bamboogroup.com.ar/puente-san-javier-porto-xavier/" target="_blank" rel="noopener noreferrer"
+              class="w-full py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition">
+              <span>Consultar detalles del Puente San Javier – Porto Xavier</span>
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    /**
+     * =========================================================================
+     * 1. COORDENADAS GEODÉSICAS DEL CRUCE FLUVIAL (SAN JAVIER – PORTO XAVIER)
+     * =========================================================================
+     */
+    // Nodo 1: Puerto San Javier (AR) -> Nodo 2: Canal Río Uruguay -> Nodo 3: Porto Xavier (BR)
+    const ROUTE_AR_TO_BR = [
+      [-27.8978525, -55.1385843],
+      [-27.8956675, -55.1355929],
+      [-27.8937366, -55.1354639]
+    ];
+    const ROUTE_BR_TO_AR = [...ROUTE_AR_TO_BR].reverse();
+
+    /**
+     * Cálculo geodésico Haversine en metros entre dos puntos [lat, lon]
+     */
+    function haversineMeters(p1, p2) {
+      const R = 6371008.8; // Radio medio terrestre en metros
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const dLat = toRad(p2[0] - p1[0]);
+      const dLon = toRad(p2[1] - p1[1]);
+      const lat1 = toRad(p1[0]);
+      const lat2 = toRad(p2[0]);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    const SEG1_METERS = haversineMeters(ROUTE_AR_TO_BR[0], ROUTE_AR_TO_BR[1]); // ~381.38 m
+    const SEG2_METERS = haversineMeters(ROUTE_AR_TO_BR[1], ROUTE_AR_TO_BR[2]); // ~215.08 m
+    const TOTAL_METERS = SEG1_METERS + SEG2_METERS; // ~596.46 m
+
+    /**
+     * =========================================================================
+     * 2. HORARIOS OFICIALES Y TARIFARIO (ABRIL 2026)
+     * =========================================================================
+     */
+    const SCHEDULES = {
+      weekday: {
+        label: 'Lunes a Viernes',
+        morning: ['08:15', '09:00', '10:00', '11:00', '11:30'],
+        afternoon: ['14:15', '15:00', '16:00', '17:00', '17:30']
+      },
+      weekend: {
+        label: 'Sábados, Domingos y Feriados',
+        morning: ['09:15', '10:00', '10:30'],
+        afternoon: ['16:15', '17:00', '17:30']
+      }
+    };
+
+    const TARIFFS = {
+      ida: {
+        currency: 'ARS',
+        symbol: '$',
+        categories: [
+          { id: 'auto', name: 'Auto o camioneta', base: 20000, extra: 5000, extraUnit: 'acompañante' },
+          { id: 'moto', name: 'Moto', base: 18000, extra: 5000, extraUnit: 'acompañante' },
+          { id: 'colectivo', name: 'Colectivo grande', base: 65000, extra: 5000, extraUnit: 'pasajero' },
+          { id: 'combi', name: 'Combi y Mini Bus', base: 53000, extra: 5000, extraUnit: 'pasajero' },
+          { id: 'bici', name: 'Bicicleta', base: 7000, extra: 0, extraUnit: '' },
+          { id: 'camion_g', name: 'Camión grande', base: 75000, extra: 0, extraUnit: '' },
+          { id: 'camion_c', name: 'Camión chico', base: 59000, extra: 0, extraUnit: '' },
+          { id: 'peaton', name: 'Peatón', base: 6000, extra: 0, extraUnit: '' }
+        ]
+      },
+      regreso: {
+        currency: 'BRL',
+        symbol: 'R$',
+        categories: [
+          { id: 'auto_br', name: 'Auto o camioneta (hasta 5 pasajeros)', base: 50, extra: 0, extraUnit: '', note: 'Incluye conductor y hasta 4 acompañantes (máx. 5 personas).' },
+          { id: 'peaton_br', name: 'Peatón', base: 10, extra: 0, extraUnit: '', note: 'Tarifa individual por pasajero a pie.' }
+        ]
+      }
+    };
+
+    /**
+     * =========================================================================
+     * 3. ESTADO GLOBAL DE LA APLICACIÓN
+     * =========================================================================
+     */
+    const state = {
+      regime: 'weekday',       // 'weekday' | 'weekend'
+      simMinutes: 8 * 60 + 15, // Inicia a las 08:15
+      playing: true,
+      speedMultiplier: 10,     // 1x, 10x, 30x, 100x, 300x, 500x
+      crossingDurationMin: 10, // Duración estándar de referencia del cruce (10 min)
+      direction: 'ida',        // 'ida' (ARS) | 'regreso' (BRL)
+      selectedCategory: 'auto',
+      companions: 0
+    };
+
+    /**
+     * =========================================================================
+     * 4. INICIALIZACIÓN DEL MAPA LEAFLET (SATELITAL, GOOGLE HYBRID Y ARGENMAP)
+     * =========================================================================
+     */
+    let map;
+    let ferryMarker;
+    let baseLayers = {};
+    let currentBaseLayerKey = 'satellite';
+
+    function initMap() {
+      // Centro exacto en el cruce del Río Uruguay [-27.8958, -55.1369], zoom 16
+      map = L.map('map', {
+        center: [-27.8958, -55.1369],
+        zoom: 16,
+        zoomControl: true
+      });
+
+      // Capa base activa por defecto: Satelital (Esri World Imagery)
+      const esriSatellite = L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
+          maxZoom: 19
+        }
+      );
+
+      // Capa base 2: Google Hybrid
+      const googleHybrid = L.tileLayer(
+        'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+        {
+          attribution: '&copy; Google Maps',
+          maxZoom: 20
+        }
+      );
+
+      // Capa base 3: Argenmap IGN Argentina
+      const argenmapIgn = L.tileLayer(
+        'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+        {
+          attribution: 'Instituto Geográfico Nacional (IGN Argentina) &mdash; Argenmap',
+          maxZoom: 18
+        }
+      );
+
+      baseLayers = {
+        satellite: esriSatellite,
+        hybrid: googleHybrid,
+        argenmap: argenmapIgn
+      };
+
+      // Respaldo automático ante error de carga de teselas
+      esriSatellite.on('tileerror', () => {
+        if (currentBaseLayerKey === 'satellite') {
+          switchBasemap('hybrid');
+        }
+      });
+
+      esriSatellite.addTo(map);
+
+      // Control nativo de capas de Leaflet en esquina superior derecha
+      L.control.layers(
+        {
+          'Satelital (Esri World Imagery)': esriSatellite,
+          'Google Hybrid': googleHybrid,
+          'Argenmap (IGN Argentina)': argenmapIgn
+        },
+        null,
+        { position: 'topright' }
+      ).addTo(map);
+
+      // Sincroniza el selector visual flotante si se cambia desde el control nativo de Leaflet
+      map.on('baselayerchange', (e) => {
+        if (e.layer === esriSatellite) syncBasemapButtons('satellite');
+        else if (e.layer === googleHybrid) syncBasemapButtons('hybrid');
+        else if (e.layer === argenmapIgn) syncBasemapButtons('argenmap');
+      });
+
+      // Dibujo de la traza fluvial exacta de 596,46 metros (halo externo + línea punteada fluvial)
+      L.polyline(ROUTE_AR_TO_BR, {
+        color: '#082f49',
+        weight: 9,
+        opacity: 0.75,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+
+      const ferryRouteLine = L.polyline(ROUTE_AR_TO_BR, {
+        color: '#38bdf8',
+        weight: 4.5,
+        opacity: 0.95,
+        dashArray: '10, 8',
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+
+      ferryRouteLine.bindPopup(`
+        <div class="space-y-1.5 text-xs min-w-[230px]">
+          <div class="font-extrabold text-sky-300 text-sm">Corredor Fluvial Río Uruguay</div>
+          <div class="font-bold text-white">Paso Internacional Paso de la Barca</div>
+          <div class="text-slate-300">Travesía San Javier (AR) – Porto Xavier (BR)</div>
+          <div class="pt-1 border-t border-slate-700 font-mono text-[11px] space-y-0.5">
+            <div>Distancia total: <strong class="text-emerald-300">${TOTAL_METERS.toFixed(2).replace('.', ',')} m (0,60 km)</strong></div>
+            <div>Tramo 1: ${SEG1_METERS.toFixed(2).replace('.', ',')} m · Tramo 2: ${SEG2_METERS.toFixed(2).replace('.', ',')} m</div>
+          </div>
+        </div>
+      `);
+
+      // Nodo intermedio (Punto medio canal Río Uruguay)
+      L.circleMarker(ROUTE_AR_TO_BR[1], {
+        radius: 5,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#0284c7',
+        fillOpacity: 1
+      })
+        .bindPopup(`
+          <div class="text-xs space-y-1">
+            <div class="font-bold text-sky-300">Canal del Río Uruguay (Punto Medio)</div>
+            <div class="font-mono text-[11px] text-slate-300">-27.8956675, -55.1355929</div>
+            <div class="text-slate-400">Límite fluvial internacional Argentina / Brasil</div>
+          </div>
+        `)
+        .addTo(map);
+
+      // Marcador personalizado Puerto San Javier (Argentina)
+      const iconSanJavier = L.divIcon({
+        className: '',
+        html: `
+          <div style="width:32px;height:32px;border-radius:50%;background:#0284c7;border:3px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.55);font-size:15px;">
+            🇦🇷
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      L.marker(ROUTE_AR_TO_BR[0], { icon: iconSanJavier })
+        .bindTooltip('🇦🇷 Puerto San Javier (AR)', {
+          permanent: true,
+          direction: 'left',
+          offset: [-16, 0],
+          className: 'port-tooltip'
+        })
+        .bindPopup(`
+          <div class="text-xs space-y-1.5 min-w-[240px]">
+            <div class="flex items-center justify-between">
+              <span class="font-extrabold text-sky-300 text-sm">🇦🇷 San Javier, Misiones</span>
+              <span class="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono text-[10px]">Argentina</span>
+            </div>
+            <p class="text-slate-300 leading-snug">
+              Cabecera argentina del <strong>Paso Internacional Paso de la Barca</strong>. Punto de salida hacia Río Grande do Sul y Santa Catarina.
+            </p>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800 font-mono text-[11px] space-y-0.5">
+              <div>Lat/Lon: -27.8978525, -55.1385843</div>
+              <div>Tarifas Ida: Auto $20.000 · Peatón $6.000 ARS</div>
+            </div>
+          </div>
+        `)
+        .addTo(map);
+
+      // Marcador personalizado Puerto Porto Xavier (Brasil)
+      const iconPortoXavier = L.divIcon({
+        className: '',
+        html: `
+          <div style="width:32px;height:32px;border-radius:50%;background:#059669;border:3px solid #ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.55);font-size:15px;">
+            🇧🇷
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      L.marker(ROUTE_AR_TO_BR[2], { icon: iconPortoXavier })
+        .bindTooltip('🇧🇷 Porto Xavier (BR)', {
+          permanent: true,
+          direction: 'right',
+          offset: [16, 0],
+          className: 'port-tooltip'
+        })
+        .bindPopup(`
+          <div class="text-xs space-y-1.5 min-w-[255px]">
+            <div class="flex items-center justify-between">
+              <span class="font-extrabold text-emerald-300 text-sm">🇧🇷 Porto Xavier, RS</span>
+              <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px]">Brasil</span>
+            </div>
+            <p class="text-slate-300 leading-snug">
+              Cabecera brasileña (<em>Travessia Porto Xavier - San Javier</em>). Conexión comercial y turística hacia <strong>Río Grande do Sul</strong> y <strong>Santa Catarina</strong>.
+            </p>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-800 font-mono text-[11px] space-y-0.5">
+              <div>Lat/Lon: -27.8937366, -55.1354639</div>
+              <div>Tarifas Regreso: Auto R$ 50 · Peatón R$ 10 BRL</div>
+            </div>
+          </div>
+        `)
+        .addTo(map);
+
+      // Inicializar marcador animado de la balsa fluvial con orientación dinámica
+      ferryMarker = L.marker(ROUTE_AR_TO_BR[0], {
+        icon: createFerryIcon(45, true),
+        zIndexOffset: 1000
+      }).addTo(map);
+    }
+
+    /**
+     * Genera el ícono circular animado de la balsa fluvial con flecha direccional
+     */
+    function createFerryIcon(headingDeg, isGoingToBrazil) {
+      const bgColor = isGoingToBrazil ? '#0284c7' : '#059669';
+      return L.divIcon({
+        className: '',
+        html: `
+          <div class="ferry-ball-marker" style="background:${bgColor};">
+            <svg style="width:15px;height:15px;color:#fff;transform:rotate(${headingDeg}deg);" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L19 21L12 17L5 21L12 2Z" />
+            </svg>
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+    }
+
+    function syncBasemapButtons(key) {
+      currentBaseLayerKey = key;
+      document.querySelectorAll('.basemap-btn').forEach((btn) => {
+        const active = btn.dataset.basemap === key;
+        btn.className = active
+          ? 'basemap-btn px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer bg-sky-600 text-white shadow'
+          : 'basemap-btn px-2.5 py-1 rounded-lg text-xs font-semibold transition cursor-pointer text-slate-300 hover:bg-slate-800';
+      });
+    }
+
+    function switchBasemap(key) {
+      if (!baseLayers[key]) return;
+      Object.values(baseLayers).forEach((layer) => {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+      });
+      baseLayers[key].addTo(map);
+      syncBasemapButtons(key);
+    }
+
+    /**
+     * =========================================================================
+     * 5. MOTOR CINEMÁTICO E INTERPOLACIÓN SOBRE POLILÍNEA
+     * =========================================================================
+     */
+    function timeStrToMinutes(hhmm) {
+      const [h, m] = hhmm.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    function formatMinutesToClock(totalMinutes) {
+      const totalSeconds = Math.floor(totalMinutes * 60);
+      const hh = String(Math.floor(totalSeconds / 3600) % 24).padStart(2, '0');
+      const mm = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const ss = String(totalSeconds % 60).padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
+    }
+
+    function computeBearingDeg(p1, p2) {
+      const toRad = (d) => (d * Math.PI) / 180;
+      const toDeg = (r) => (r * 180) / Math.PI;
+      const lat1 = toRad(p1[0]);
+      const lat2 = toRad(p2[0]);
+      const dLon = toRad(p2[1] - p1[1]);
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    /**
+     * Interpola posición [lat, lon] y rumbo exacto a lo largo de los 3 vértices
+     */
+    function interpolateRoute(coords, fraction) {
+      const clamped = Math.max(0, Math.min(1, fraction));
+      const segs = [];
+      let total = 0;
+      for (let i = 0; i < coords.length - 1; i++) {
+        const d = haversineMeters(coords[i], coords[i + 1]);
+        segs.push(d);
+        total += d;
+      }
+      if (clamped <= 0) {
+        return { pos: coords[0], heading: computeBearingDeg(coords[0], coords[1]) };
+      }
+      if (clamped >= 1) {
+        const last = coords.length - 1;
+        return { pos: coords[last], heading: computeBearingDeg(coords[last - 1], coords[last]) };
+      }
+      let targetDist = total * clamped;
+      for (let i = 0; i < segs.length; i++) {
+        if (targetDist <= segs[i]) {
+          const r = segs[i] === 0 ? 0 : targetDist / segs[i];
+          const pos = [
+            coords[i][0] + (coords[i + 1][0] - coords[i][0]) * r,
+            coords[i][1] + (coords[i + 1][1] - coords[i][1]) * r
+          ];
+          return { pos, heading: computeBearingDeg(coords[i], coords[i + 1]) };
+        }
+        targetDist -= segs[i];
+      }
+      return { pos: coords[coords.length - 1], heading: 0 };
+    }
+
+    function getActiveDepartures() {
+      const reg = SCHEDULES[state.regime];
+      return [...reg.morning, ...reg.afternoon];
+    }
+
+    function formatWaitDuration(minsFloat) {
+      const totalMins = Math.max(0, Math.ceil(minsFloat));
+      if (totalMins < 60) {
+        return `${totalMins} min`;
+      }
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return m === 0 ? `${h} h` : `${h} h ${m} m`;
+    }
+
+    /**
+     * Calcula cuánto falta esperar para que salga el próximo barco desde San Javier
+     */
+    function computeNextDepartureWait(currentMin) {
+      const departures = getActiveDepartures();
+      for (let i = 0; i < departures.length; i++) {
+        const depStr = departures[i];
+        const depMin = timeStrToMinutes(depStr);
+        if (depMin > currentMin) {
+          return {
+            nextDepStr: depStr,
+            waitMinutes: depMin - currentMin,
+            isNextDay: false
+          };
+        }
+      }
+      // Si ya zarpó el último servicio de la tarde (17:30), calcula espera hasta el primero del día siguiente
+      const firstDepStr = departures[0];
+      const firstDepMin = timeStrToMinutes(firstDepStr);
+      const minsUntilNextMorning = (1440 - currentMin) + firstDepMin;
+      return {
+        nextDepStr: firstDepStr,
+        waitMinutes: minsUntilNextMorning,
+        isNextDay: true
+      };
+    }
+
+    /**
+     * Evalúa el estado de la balsa en el minuto actual:
+     * - Durante [dep, dep + dur]: Cruce de Ida (San Javier AR -> Porto Xavier BR)
+     * - Durante (dep + dur, dep + 2*dur]: Cruce de Regreso (Porto Xavier BR -> San Javier AR)
+     * - Fuera de ventana: Atracada en muelle esperando próxima salida
+     */
+    function evaluateFerryState(currentMin) {
+      const departures = getActiveDepartures();
+      const dur = state.crossingDurationMin;
+
+      for (let i = 0; i < departures.length; i++) {
+        const depStr = departures[i];
+        const depMin = timeStrToMinutes(depStr);
+        const endIda = depMin + dur;
+        const endRegreso = depMin + dur * 2;
+
+        if (currentMin >= depMin && currentMin <= endIda) {
+          const progress = (currentMin - depMin) / dur;
+          return {
+            status: 'crossing_ida',
+            depStr,
+            progress,
+            isGoingToBrazil: true,
+            coords: ROUTE_AR_TO_BR
+          };
+        }
+
+        // Evita solapar el regreso si ya comienza la siguiente salida programada
+        const nextDepMin = i + 1 < departures.length ? timeStrToMinutes(departures[i + 1]) : Infinity;
+        const effectiveEndRegreso = Math.min(endRegreso, nextDepMin);
+
+        if (currentMin > endIda && currentMin <= effectiveEndRegreso) {
+          const progress = (currentMin - endIda) / dur;
+          return {
+            status: 'crossing_regreso',
+            depStr,
+            progress: Math.min(1, progress),
+            isGoingToBrazil: false,
+            coords: ROUTE_BR_TO_AR
+          };
+        }
+      }
+
+      // Buscar próxima salida del día
+      const nextDep = departures.find((d) => timeStrToMinutes(d) > currentMin) || departures[0];
+      return {
+        status: 'docked',
+        depStr: nextDep,
+        progress: 0,
+        isGoingToBrazil: true,
+        coords: ROUTE_AR_TO_BR
+      };
+    }
+
+    /**
+     * =========================================================================
+     * 5B. CRONOGRAMA VISUAL POR BLOQUES Y TIEMPO DE ESPERA (07:30 - 18:30)
+     * =========================================================================
+     */
+    const CHART_START_MIN = 450;  // 07:30
+    const CHART_END_MIN = 1110;   // 18:30
+    const CHART_X0 = 14;
+    const CHART_X1 = 406;
+    const TRACK_Y = 66;
+
+    function minToChartX(min) {
+      const clamped = Math.max(CHART_START_MIN, Math.min(CHART_END_MIN, min));
+      const ratio = (clamped - CHART_START_MIN) / (CHART_END_MIN - CHART_START_MIN);
+      return CHART_X0 + ratio * (CHART_X1 - CHART_X0);
+    }
+
+    function chartXToMin(x) {
+      const clampedX = Math.max(CHART_X0, Math.min(CHART_X1, x));
+      const ratio = (clampedX - CHART_X0) / (CHART_X1 - CHART_X0);
+      return CHART_START_MIN + ratio * (CHART_END_MIN - CHART_START_MIN);
+    }
+
+    function renderDayScheduleChart() {
+      const svg = document.getElementById('day-schedule-svg');
+      if (!svg) return;
+
+      const reg = SCHEDULES[state.regime];
+      const allDeps = [...reg.morning, ...reg.afternoon];
+
+      const mStartMin = timeStrToMinutes(reg.morning[0]);
+      const mEndMin = timeStrToMinutes(reg.morning[reg.morning.length - 1]);
+      const aStartMin = timeStrToMinutes(reg.afternoon[0]);
+      const aEndMin = timeStrToMinutes(reg.afternoon[reg.afternoon.length - 1]);
+
+      const xM1 = minToChartX(mStartMin);
+      const xM2 = minToChartX(mEndMin);
+      const xA1 = minToChartX(aStartMin);
+      const xA2 = minToChartX(aEndMin);
+
+      const breakMinutes = aStartMin - mEndMin;
+      const breakMidX = (xM2 + xA1) / 2;
+
+      let markup = `
+        <!-- Carril base de la jornada (07:30 a 18:30) -->
+        <rect x="${CHART_X0}" y="28" width="${CHART_X1 - CHART_X0}" height="64" rx="10"
+              fill="#020617" stroke="#1e293b" stroke-width="1" />
+
+        <!-- Bloque Operativo Mañana -->
+        <rect x="${Math.max(CHART_X0 + 2, xM1 - 8).toFixed(1)}" y="30"
+              width="${(xM2 - Math.max(CHART_X0 + 2, xM1 - 8) + 8).toFixed(1)}" height="60" rx="7"
+              fill="rgba(14, 165, 233, 0.12)" stroke="rgba(56, 189, 248, 0.35)" stroke-width="1" />
+        <text x="${((xM1 + xM2) / 2).toFixed(1)}" y="41" fill="#7dd3fc" font-size="8.5"
+              font-family="Inter, sans-serif" font-weight="800" text-anchor="middle">
+          TURNO MAÑANA
+        </text>
+
+        <!-- Franja Central: Receso del Mediodía (Sin balsas) -->
+        <rect x="${(xM2 + 8).toFixed(1)}" y="30"
+              width="${Math.max(10, xA1 - xM2 - 16).toFixed(1)}" height="60" rx="6"
+              fill="rgba(245, 158, 11, 0.10)" stroke="rgba(245, 158, 11, 0.35)" stroke-dasharray="3,2" stroke-width="1" />
+        <text x="${breakMidX.toFixed(1)}" y="54" fill="#fbbf24" font-size="8.5"
+              font-family="Inter, sans-serif" font-weight="800" text-anchor="middle">
+          SIN BALSA
+        </text>
+        <text x="${breakMidX.toFixed(1)}" y="66" fill="#fde68a" font-size="8"
+              font-family="JetBrains Mono, monospace" font-weight="700" text-anchor="middle">
+          ${formatWaitDuration(breakMinutes)}
+        </text>
+
+        <!-- Bloque Operativo Tarde -->
+        <rect x="${(xA1 - 8).toFixed(1)}" y="30"
+              width="${(Math.min(CHART_X1 - 2, xA2 + 8) - (xA1 - 8)).toFixed(1)}" height="60" rx="7"
+              fill="rgba(16, 185, 129, 0.12)" stroke="rgba(52, 211, 153, 0.35)" stroke-width="1" />
+        <text x="${((xA1 + xA2) / 2).toFixed(1)}" y="41" fill="#6ee7b7" font-size="8.5"
+              font-family="Inter, sans-serif" font-weight="800" text-anchor="middle">
+          TURNO TARDE
+        </text>
+
+        <!-- Línea eje horizontal de salidas -->
+        <line x1="${CHART_X0 + 6}" y1="${TRACK_Y}" x2="${CHART_X1 - 6}" y2="${TRACK_Y}"
+              stroke="#334155" stroke-width="2" stroke-linecap="round" />
+      `;
+
+      // Etiquetas de intervalos en minutos entre salidas consecutivas dentro de cada turno
+      const drawIntervals = (list, color) => {
+        for (let i = 0; i < list.length - 1; i++) {
+          const m1 = timeStrToMinutes(list[i]);
+          const m2 = timeStrToMinutes(list[i + 1]);
+          const diff = m2 - m1;
+          const midX = (minToChartX(m1) + minToChartX(m2)) / 2;
+          markup += `
+            <text x="${midX.toFixed(1)}" y="${TRACK_Y + 15}" fill="${color}" font-size="7.5"
+                  font-family="JetBrains Mono, monospace" font-weight="700" text-anchor="middle" opacity="0.9">
+              ${diff}m
+            </text>
+          `;
+        }
+      };
+      drawIntervals(reg.morning, '#7dd3fc');
+      drawIntervals(reg.afternoon, '#6ee7b7');
+
+      // Hitos circulares de cada salida con su hora exacta
+      allDeps.forEach((depStr, idx) => {
+        const isMorning = idx < reg.morning.length;
+        const x = minToChartX(timeStrToMinutes(depStr));
+        const dotColor = isMorning ? '#38bdf8' : '#34d399';
+        const shortLabel = depStr.replace(':00', 'h');
+
+        markup += `
+          <g>
+            <circle cx="${x.toFixed(1)}" cy="${TRACK_Y}" r="4.5" fill="${dotColor}" stroke="#020617" stroke-width="1.5" />
+            <text x="${x.toFixed(1)}" y="${TRACK_Y - 9}" fill="#f8fafc" font-size="8"
+                  font-family="JetBrains Mono, monospace" font-weight="700" text-anchor="middle">
+              ${shortLabel}
+            </text>
+          </g>
+        `;
+      });
+
+      // Eje inferior de referencias horarias (08h a 18h cada 2 horas)
+      for (let h = 8; h <= 18; h += 2) {
+        const x = minToChartX(h * 60);
+        markup += `
+          <line x1="${x.toFixed(1)}" y1="92" x2="${x.toFixed(1)}" y2="97" stroke="#475569" stroke-width="1" />
+          <text x="${x.toFixed(1)}" y="110" fill="#94a3b8" font-size="8.5"
+                font-family="JetBrains Mono, monospace" text-anchor="middle">
+            ${String(h).padStart(2, '0')}:00
+          </text>
+        `;
+      }
+
+      // Aguja vertical móvil "AHORA" con etiqueta superior
+      markup += `
+        <g id="chart-live-cursor" pointer-events="none">
+          <line id="chart-cursor-line" x1="${CHART_X0}" y1="20" x2="${CHART_X0}" y2="95"
+                stroke="#f59e0b" stroke-width="2" />
+          <rect id="chart-cursor-pill" x="${CHART_X0 - 20}" y="2" width="40" height="15" rx="4" fill="#f59e0b" />
+          <text id="chart-cursor-text" x="${CHART_X0}" y="12.5" fill="#0f172a" font-size="8.5"
+                font-family="JetBrains Mono, monospace" font-weight="800" text-anchor="middle">
+            08:15
+          </text>
+          <circle id="chart-ferry-dot" cx="${CHART_X0}" cy="${TRACK_Y}" r="5.5"
+                  fill="#ffffff" stroke="#f59e0b" stroke-width="2.5" />
+        </g>
+      `;
+
+      svg.innerHTML = markup;
+    }
+
+    function updateDayScheduleCursor() {
+      const x = minToChartX(state.simMinutes);
+      const line = document.getElementById('chart-cursor-line');
+      const pill = document.getElementById('chart-cursor-pill');
+      const text = document.getElementById('chart-cursor-text');
+      const dot = document.getElementById('chart-ferry-dot');
+
+      if (line && pill && text && dot) {
+        const xStr = x.toFixed(1);
+        line.setAttribute('x1', xStr);
+        line.setAttribute('x2', xStr);
+
+        const clampedPillX = Math.max(CHART_X0, Math.min(CHART_X1 - 40, x - 20));
+        pill.setAttribute('x', clampedPillX.toFixed(1));
+        text.setAttribute('x', (clampedPillX + 20).toFixed(1));
+        text.textContent = formatMinutesToClock(state.simMinutes).slice(0, 5);
+
+        dot.setAttribute('cx', xStr);
+      }
+    }
+
+    function renderTimelineSliderTicks() {
+      const container = document.getElementById('slider-ticks');
+      if (!container) return;
+      container.innerHTML = '';
+      const deps = getActiveDepartures();
+      deps.forEach((depStr) => {
+        const depMin = timeStrToMinutes(depStr);
+        const pct = ((depMin - CHART_START_MIN) / (CHART_END_MIN - CHART_START_MIN)) * 100;
+        const tick = document.createElement('span');
+        tick.style.left = `${pct}%`;
+        tick.title = `Salida ${depStr} hs`;
+        tick.className = 'absolute top-0 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-sky-400/90';
+        container.appendChild(tick);
+      });
+    }
+
+    function updateSimulationUI() {
+      document.getElementById('sim-clock').textContent = formatMinutesToClock(state.simMinutes);
+      document.getElementById('time-slider').value = state.simMinutes;
+
+      const evalState = evaluateFerryState(state.simMinutes);
+      const waitInfo = computeNextDepartureWait(state.simMinutes);
+      const interp = interpolateRoute(evalState.coords, evalState.progress);
+
+      if (ferryMarker) {
+        ferryMarker.setLatLng(interp.pos);
+        ferryMarker.setIcon(createFerryIcon(interp.heading, evalState.isGoingToBrazil));
+      }
+
+      const statusPill = document.getElementById('sim-status-pill');
+      const legLabel = document.getElementById('sim-leg-label');
+      const progressBar = document.getElementById('sim-progress-bar');
+      const pctText = document.getElementById('sim-pct-text');
+      const metersText = document.getElementById('sim-meters-text');
+      const nextWaitCard = document.getElementById('sim-next-wait');
+      const nextDepBig = document.getElementById('next-departure-big');
+      const waitBigValue = document.getElementById('wait-big-value');
+      const waitProgressFill = document.getElementById('wait-progress-fill');
+      const nextSummary = document.getElementById('next-service-summary');
+      const waitBadge = document.getElementById('wait-countdown-badge');
+      const barWaitSummary = document.getElementById('bar-wait-summary');
+      const headerNextBoat = document.getElementById('header-next-boat');
+
+      const pct = Math.round(evalState.progress * 100);
+      const metersCovered = Math.round(TOTAL_METERS * evalState.progress);
+      const waitFormatted = formatWaitDuration(waitInfo.waitMinutes);
+      const nextDaySuffix = waitInfo.isNextDay ? ' (mañana)' : '';
+
+      // Calcular porcentaje de espera transcurrido desde el barco anterior hasta el próximo
+      const departures = getActiveDepartures();
+      const prevDeps = departures.filter((d) => timeStrToMinutes(d) <= state.simMinutes);
+      const prevDepMin = prevDeps.length > 0 ? timeStrToMinutes(prevDeps[prevDeps.length - 1]) : CHART_START_MIN;
+      const nextDepMin = waitInfo.isNextDay
+        ? 1440 + timeStrToMinutes(waitInfo.nextDepStr)
+        : timeStrToMinutes(waitInfo.nextDepStr);
+      const intervalTotal = Math.max(1, nextDepMin - prevDepMin);
+      const waitElapsedPct = Math.max(0, Math.min(100, ((state.simMinutes - prevDepMin) / intervalTotal) * 100));
+
+      progressBar.style.width = `${pct}%`;
+      pctText.textContent = `${pct}%`;
+      metersText.textContent = `${metersCovered} / ${Math.round(TOTAL_METERS)} m`;
+      nextWaitCard.textContent = waitInfo.isNextDay ? `${waitInfo.nextDepStr} hs` : waitFormatted;
+      if (nextDepBig) nextDepBig.textContent = `${waitInfo.nextDepStr} hs${nextDaySuffix}`;
+      if (waitBigValue) waitBigValue.textContent = waitFormatted;
+      if (waitProgressFill) waitProgressFill.style.width = `${waitElapsedPct}%`;
+      waitBadge.textContent = waitInfo.isNextDay ? 'Cerrado' : `Faltan ${waitFormatted}`;
+      barWaitSummary.textContent = `${waitFormatted} (${waitInfo.nextDepStr} hs${nextDaySuffix})`;
+      if (headerNextBoat) {
+        headerNextBoat.textContent = `${waitInfo.nextDepStr} hs (en ${waitFormatted})`;
+      }
+
+      if (evalState.status === 'crossing_ida') {
+        statusPill.textContent = 'En cruce (Ida)';
+        statusPill.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40';
+        legLabel.textContent = `🇦🇷 San Javier → 🇧🇷 Porto Xavier (Salida ${evalState.depStr})`;
+        nextSummary.textContent = `Balsa cruzando AR → BR (${evalState.depStr} hs)`;
+      } else if (evalState.status === 'crossing_regreso') {
+        statusPill.textContent = 'En cruce (Regreso)';
+        statusPill.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        legLabel.textContent = `🇧🇷 Porto Xavier → 🇦🇷 San Javier (Retorno ciclo ${evalState.depStr})`;
+        nextSummary.textContent = `Balsa regresando BR → AR`;
+      } else {
+        statusPill.textContent = 'En muelle AR';
+        statusPill.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700';
+        legLabel.textContent = `En muelle San Javier · Sale ${waitInfo.nextDepStr} hs (en ${waitFormatted})`;
+        nextSummary.textContent = `En puerto esperando zarpe`;
+      }
+
+      updateDayScheduleCursor();
+      highlightSchedulePills(evalState);
+    }
+
+    /**
+     * =========================================================================
+     * 6. RENDERIZADO DE GRILLAS DE HORARIOS Y SALTOS RÁPIDOS
+     * =========================================================================
+     */
+    function jumpToDeparture(hhmm, regimeKey = null) {
+      if (regimeKey && regimeKey !== state.regime) {
+        setRegime(regimeKey);
+      }
+      state.simMinutes = timeStrToMinutes(hhmm);
+      state.playing = true;
+      document.getElementById('play-pause-icon').textContent = '⏸';
+      document.getElementById('play-pause-text').textContent = 'Pausar';
+      updateSimulationUI();
+    }
+
+    function renderScheduleGrids() {
+      const renderGroup = (containerId, times, regimeKey) => {
+        const el = document.getElementById(containerId);
+        el.innerHTML = '';
+        times.forEach((t) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.dataset.time = t;
+          btn.dataset.regime = regimeKey;
+          btn.textContent = t;
+          btn.className =
+            'schedule-pill py-2 px-1.5 rounded-xl font-mono text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 transition cursor-pointer text-center';
+          btn.onclick = () => jumpToDeparture(t, regimeKey);
+          el.appendChild(btn);
+        });
+      };
+
+      renderGroup('grid-weekday-morning', SCHEDULES.weekday.morning, 'weekday');
+      renderGroup('grid-weekday-afternoon', SCHEDULES.weekday.afternoon, 'weekday');
+      renderGroup('grid-weekend-morning', SCHEDULES.weekend.morning, 'weekend');
+      renderGroup('grid-weekend-afternoon', SCHEDULES.weekend.afternoon, 'weekend');
+
+      renderQuickJumpButtons();
+    }
+
+    function renderQuickJumpButtons() {
+      const container = document.getElementById('quick-jump-container');
+      container.innerHTML = '';
+      const deps = getActiveDepartures();
+      deps.forEach((t) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = t;
+        btn.title = `Saltar a la salida de las ${t} hs`;
+        btn.className =
+          'px-2 py-1 rounded-lg font-mono text-[11px] font-bold bg-slate-900 hover:bg-sky-600 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer';
+        btn.onclick = () => jumpToDeparture(t);
+        container.appendChild(btn);
+      });
+    }
+
+    function highlightSchedulePills(evalState) {
+      document.querySelectorAll('.schedule-pill').forEach((pill) => {
+        const isCurrentRegime = pill.dataset.regime === state.regime;
+        const isTargetTime = pill.dataset.time === evalState.depStr;
+
+        if (isCurrentRegime && isTargetTime) {
+          if (evalState.status !== 'docked') {
+            pill.className =
+              'schedule-pill py-2 px-1.5 rounded-xl font-mono text-xs font-extrabold bg-emerald-600 text-white border border-emerald-400 shadow-lg shadow-emerald-600/25 transition cursor-pointer text-center';
+          } else {
+            pill.className =
+              'schedule-pill py-2 px-1.5 rounded-xl font-mono text-xs font-extrabold bg-sky-600/30 text-sky-200 border border-sky-400 transition cursor-pointer text-center';
+          }
+        } else {
+          pill.className =
+            'schedule-pill py-2 px-1.5 rounded-xl font-mono text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 transition cursor-pointer text-center';
+        }
+      });
+    }
+
+    function setRegime(newRegime) {
+      state.regime = newRegime;
+      const isWeekday = newRegime === 'weekday';
+
+      document.getElementById('regime-weekday').className = isWeekday
+        ? 'regime-btn px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-600 text-white cursor-pointer'
+        : 'regime-btn px-2 py-0.5 rounded-md text-[11px] font-bold text-slate-400 hover:text-white cursor-pointer';
+
+      document.getElementById('regime-weekend').className = !isWeekday
+        ? 'regime-btn px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-600 text-white cursor-pointer'
+        : 'regime-btn px-2 py-0.5 rounded-md text-[11px] font-bold text-slate-400 hover:text-white cursor-pointer';
+
+      document.getElementById('badge-active-regime').textContent = SCHEDULES[newRegime].label;
+      renderQuickJumpButtons();
+      renderTimelineSliderTicks();
+      renderDayScheduleChart();
+      updateSimulationUI();
+    }
+
+    /**
+     * =========================================================================
+     * 7. CALCULADORA DE TARIFAS (VIGENCIA ABRIL 2026)
+     * =========================================================================
+     */
+    function formatCurrency(amount, currency) {
+      if (currency === 'ARS') {
+        return '$ ' + amount.toLocaleString('es-AR');
+      }
+      return 'R$ ' + amount.toLocaleString('pt-BR');
+    }
+
+    function populateTariffCategories() {
+      const select = document.getElementById('calc-category');
+      const tariffGroup = TARIFFS[state.direction];
+      select.innerHTML = '';
+
+      tariffGroup.categories.forEach((cat) => {
+        const opt = document.createElement('option');
+        opt.value = cat.id;
+        const extraTxt = cat.extra > 0 ? ` (+ ${formatCurrency(cat.extra, tariffGroup.currency)}/${cat.extraUnit})` : '';
+        opt.textContent = `${cat.name} — ${formatCurrency(cat.base, tariffGroup.currency)}${extraTxt}`;
+        select.appendChild(opt);
+      });
+
+      state.selectedCategory = tariffGroup.categories[0].id;
+      state.companions = 0;
+      updateTariffCalculator();
+    }
+
+    function updateTariffCalculator() {
+      const tariffGroup = TARIFFS[state.direction];
+      const category =
+        tariffGroup.categories.find((c) => c.id === state.selectedCategory) || tariffGroup.categories[0];
+
+      const companionsBox = document.getElementById('companions-box');
+      const companionsSub = document.getElementById('companions-sub');
+      const companionsLabel = document.getElementById('companions-label');
+      const btnMinus = document.getElementById('btn-comp-minus');
+      const btnPlus = document.getElementById('btn-comp-plus');
+
+      if (category.extra > 0) {
+        companionsBox.classList.remove('opacity-50');
+        btnMinus.disabled = false;
+        btnPlus.disabled = false;
+        companionsLabel.textContent =
+          category.extraUnit === 'pasajero' ? 'Pasajeros a bordo' : 'Acompañantes adicionales';
+        companionsSub.textContent = `${formatCurrency(category.extra, tariffGroup.currency)} ARS por cada ${category.extraUnit}`;
+      } else {
+        state.companions = 0;
+        companionsBox.classList.add('opacity-50');
+        btnMinus.disabled = true;
+        btnPlus.disabled = true;
+        companionsLabel.textContent = 'Sin cargo adicional por acompañante';
+        companionsSub.textContent = category.note || 'Tarifa fija por unidad o pasajero individual.';
+      }
+
+      document.getElementById('companions-count').textContent = state.companions;
+
+      const extraTotal = category.extra * state.companions;
+      const grandTotal = category.base + extraTotal;
+
+      document.getElementById('calc-base-val').textContent = formatCurrency(category.base, tariffGroup.currency);
+      document.getElementById('calc-extra-label').textContent =
+        category.extra > 0
+          ? `Adicionales (${state.companions} × ${formatCurrency(category.extra, tariffGroup.currency)}):`
+          : 'Adicionales:';
+      document.getElementById('calc-extra-val').textContent = formatCurrency(extraTotal, tariffGroup.currency);
+      document.getElementById('calc-total-val').textContent = `${formatCurrency(grandTotal, tariffGroup.currency)} ${tariffGroup.currency}`;
+    }
+
+    function setDirection(dir) {
+      state.direction = dir;
+      const isIda = dir === 'ida';
+
+      document.getElementById('dir-ida').className = isIda
+        ? 'dir-btn p-2.5 rounded-xl border text-left transition cursor-pointer bg-sky-600/20 border-sky-500 text-white'
+        : 'dir-btn p-2.5 rounded-xl border text-left transition cursor-pointer bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700';
+
+      document.getElementById('dir-regreso').className = !isIda
+        ? 'dir-btn p-2.5 rounded-xl border text-left transition cursor-pointer bg-emerald-600/20 border-emerald-500 text-white'
+        : 'dir-btn p-2.5 rounded-xl border text-left transition cursor-pointer bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700';
+
+      populateTariffCategories();
+    }
+
+    /**
+     * =========================================================================
+     * 8. PESTAÑAS Y BUCLE DE ANIMACIÓN
+     * =========================================================================
+     */
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        const active = btn.dataset.tab === tabName;
+        btn.className = active
+          ? 'tab-btn py-2 px-2 rounded-xl text-xs font-bold transition cursor-pointer bg-sky-600 text-white shadow'
+          : 'tab-btn py-2 px-2 rounded-xl text-xs font-bold transition cursor-pointer text-slate-400 hover:text-white hover:bg-slate-900';
+      });
+
+      document.querySelectorAll('.tab-panel').forEach((panel) => {
+        panel.classList.toggle('hidden', panel.id !== `tab-${tabName}`);
+      });
+    }
+
+    let lastFrameTs = performance.now();
+    function animationLoop(now) {
+      const dtSeconds = (now - lastFrameTs) / 1000;
+      lastFrameTs = now;
+
+      if (state.playing) {
+        // Avance en minutos simulados según multiplicador (1x hasta 500x)
+        state.simMinutes += (dtSeconds * state.speedMultiplier) / 60;
+        if (state.simMinutes > 1110) {
+          // Reinicia suavemente a 07:30 al llegar a 18:30
+          state.simMinutes = 450;
+        }
+        updateSimulationUI();
+      }
+
+      requestAnimationFrame(animationLoop);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('header-dist').textContent = `${TOTAL_METERS.toFixed(2).replace('.', ',')} m`;
+
+      initMap();
+      renderScheduleGrids();
+      renderTimelineSliderTicks();
+      renderDayScheduleChart();
+      populateTariffCategories();
+      updateSimulationUI();
+
+      // Clic interactivo sobre el Gráfico Resumen del Día para saltar a cualquier horario
+      const daySvg = document.getElementById('day-schedule-svg');
+      if (daySvg) {
+        daySvg.addEventListener('click', (e) => {
+          const rect = daySvg.getBoundingClientRect();
+          const svgX = ((e.clientX - rect.left) / rect.width) * 420;
+          state.simMinutes = chartXToMin(svgX);
+          updateSimulationUI();
+        });
+      }
+
+      // Eventos de capas base
+      document.querySelectorAll('.basemap-btn').forEach((btn) => {
+        btn.addEventListener('click', () => switchBasemap(btn.dataset.basemap));
+      });
+
+      // Eventos de Play / Pausa
+      document.getElementById('btn-play-pause').addEventListener('click', () => {
+        state.playing = !state.playing;
+        document.getElementById('play-pause-icon').textContent = state.playing ? '⏸' : '▶';
+        document.getElementById('play-pause-text').textContent = state.playing ? 'Pausar' : 'Reanudar';
+      });
+
+      // Eventos de velocidad de simulación
+      document.querySelectorAll('.speed-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.speedMultiplier = Number(btn.dataset.speed);
+          document.querySelectorAll('.speed-btn').forEach((b) => {
+            const active = Number(b.dataset.speed) === state.speedMultiplier;
+            b.className = active
+              ? 'speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold bg-emerald-600 text-white cursor-pointer'
+              : 'speed-btn px-2 py-1 rounded-lg text-[11px] font-mono font-bold text-slate-400 hover:text-white cursor-pointer';
+          });
+        });
+      });
+
+      // Slider de tiempo
+      document.getElementById('time-slider').addEventListener('input', (e) => {
+        state.simMinutes = Number(e.target.value);
+        updateSimulationUI();
+      });
+
+      // Selector de régimen
+      document.getElementById('regime-weekday').addEventListener('click', () => setRegime('weekday'));
+      document.getElementById('regime-weekend').addEventListener('click', () => setRegime('weekend'));
+
+      // Pestañas del panel lateral
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      });
+      document.getElementById('btn-open-context-tab').addEventListener('click', () => switchTab('contexto'));
+
+      // Calculadora de tarifas
+      document.getElementById('dir-ida').addEventListener('click', () => setDirection('ida'));
+      document.getElementById('dir-regreso').addEventListener('click', () => setDirection('regreso'));
+      document.getElementById('calc-category').addEventListener('change', (e) => {
+        state.selectedCategory = e.target.value;
+        updateTariffCalculator();
+      });
+      document.getElementById('btn-comp-minus').addEventListener('click', () => {
+        if (state.companions > 0) {
+          state.companions--;
+          updateTariffCalculator();
+        }
+      });
+      document.getElementById('btn-comp-plus').addEventListener('click', () => {
+        if (state.companions < 60) {
+          state.companions++;
+          updateTariffCalculator();
+        }
+      });
+
+      // Iniciar bucle de animación
+      requestAnimationFrame(animationLoop);
+    });
+  </script>
+</body>
+</html>
